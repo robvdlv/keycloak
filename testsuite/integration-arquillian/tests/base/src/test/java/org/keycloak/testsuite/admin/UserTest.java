@@ -106,6 +106,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
@@ -1547,6 +1548,35 @@ public class UserTest extends AbstractAdminTest {
         assertEquals("foo", user1.getAttributes().get("usercertificate").get(0));
         assertEquals("bar", user1.getAttributes().get("saml.persistent.name.id.for.foo").get(0));
         assertFalse(user1.getAttributes().containsKey(LDAPConstants.LDAP_ID));
+    }
+
+    @Test
+    public void update_user_attributes_leaves_user_email_unaffected_21751() {
+        String random = UUID.randomUUID().toString();
+        String userName = String.format("username-%s", random);
+        String email = String.format("my@mail-%s.com", random);
+        UserRepresentation user = new UserRepresentation();
+        user.setUsername(userName);
+        user.setEmail(email);
+        String userId = createUser(user);
+
+        // possibly redundant check, but ok, let's make sure
+        UserRepresentation created = realm.users().get(userId).toRepresentation();
+        assertThat(created.getEmail(), equalTo(email));
+        assertThat(created.getUsername(), equalTo(userName));
+        assertThat(created.getAttributes(), Matchers.nullValue());
+
+        UserRepresentation update = new UserRepresentation();
+        update.setId(userId);
+        update.setAttributes(Map.of("phoneNumber", List.of("123")));
+        updateUser(realm.users().get(userId), update);
+
+        UserRepresentation updated = realm.users().get(userId).toRepresentation();
+        // surely ...
+        assertThat(updated.getUsername(), equalTo(userName));
+        assertThat(updated.getAttributes(), equalTo(Map.of("phoneNumber", List.of("123"))));
+        // bugfix: email must be in-tact!
+        assertThat(updated.getEmail(), equalTo(email));
     }
 
     @Test
